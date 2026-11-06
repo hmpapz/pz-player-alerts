@@ -1,0 +1,35 @@
+name: Player count alerts
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # every 5 minutes (GitHub may run it a bit late)
+  workflow_dispatch:         # adds a "Run workflow" button for testing
+
+permissions:
+  contents: write
+
+concurrency: player-alerts
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install python-a2s requests
+      - run: python check_players.py
+        env:
+          SERVER_IP: "167.114.174.181"
+          SERVER_PORT: "27145"
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+      - name: Remember last milestone
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git config user.name "player-alert-bot"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add state.json
+            git commit -m "Update player alert state"
+            git push
+          fi
