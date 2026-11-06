@@ -1,0 +1,24 @@
+name: Restart messages
+
+on:
+  schedule:
+    # 5:10am/pm Eastern (both standard and daylight time are covered;
+    # the script quits on the run that doesn't match and waits until 5:55 on the one that does)
+    - cron: "10 9,10,21,22 * * *"
+  workflow_dispatch:
+
+concurrency: restart-messages
+
+jobs:
+  restart:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests tzdata
+      - run: python restart_messages.py
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
