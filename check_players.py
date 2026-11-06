@@ -1,5 +1,5 @@
 # Checks the Project Zomboid server's player count and posts
-# "5 players online", "10 players online", etc. to Discord.
+# a message each time it passes 5, 10, 15... players, showing the real count.
 # - At most one message per hour
 # - Never posts "0 players online"
 
@@ -40,9 +40,9 @@ print(f"{players} players online (milestone {milestone}, last announced {last})"
 new_last, new_post = last, last_post
 if milestone > last and milestone > 0:
     if now - last_post >= COOLDOWN:
-        r = requests.post(WEBHOOK, json={"content": f"{milestone} players online"}, timeout=10)
+        r = requests.post(WEBHOOK, json={"content": f"{players} players online"}, timeout=10)
         r.raise_for_status()
-        print(f"Posted: {milestone} players online")
+        print(f"Posted: {players} players online")
         new_last, new_post = milestone, now
     else:
         mins = int((COOLDOWN - (now - last_post)) / 60) + 1
