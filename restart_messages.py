@@ -30,6 +30,12 @@ def wait_until(t):
         time.sleep(seconds)
 
 
+if os.environ.get("TEST_MODE") == "true":
+    # Test run (manual "Run workflow"): post both messages right away
+    post("TEST MESSAGE: " + WARNING)
+    post("TEST MESSAGE: " + REBOOT)
+    raise SystemExit(0)
+
 now = datetime.now(TZ)
 if now.hour not in (5, 17):
     print(f"It's {now:%I:%M %p} Eastern, not the hour before a restart. Nothing to do.")
