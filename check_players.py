@@ -1,10 +1,12 @@
 # Project Zomboid player-count alerts for Discord (Eastern time).
 #
-# - Every rise of 5 (5, 10, 15...) posts right away with the real count: "12 players online"
-# - Top of each hour: posts the current count (if 5+), and resets so rises can be announced again.
+# - Starts at 3 players. Every new high (3, 4, 5, 6...) gets posted: "7 players online"
+# - Slow mode: at most one message every 15 minutes. If more people join during the wait,
+#   it posts just the newest count once the 15 minutes are up.
+# - Top of each hour: posts the current count (if 3+), and resets so rises can be announced again.
 #   If a higher-or-equal count was posted in the last 20 minutes, it waits until those 20 minutes pass.
 # - At 6:01am/pm (after the server restart) it resets to 0, so players rejoining get announced.
-# - Never posts "0 players online"; skips the hourly update at 6am/pm (restart messages cover it).
+# - Never posts drops or "0 players online"; skips the hourly update at 6am/pm.
 
 import json
 import os
@@ -19,7 +21,8 @@ IP = os.environ["SERVER_IP"]
 PORT = int(os.environ["SERVER_PORT"])
 WEBHOOK = os.environ["DISCORD_WEBHOOK"]
 
-STEP = 5                  # announce every 5 players
+MIN_PLAYERS = 3           # start announcing at 3 players
+SLOW_MODE_MINUTES = 15    # at least this long between messages
 HOLD_MINUTES = 20         # hourly update waits this long after a recent higher/equal post
 RESTART_HOURS = (6, 18)   # 6am and 6pm
 RESET_MINUTE = 1          # reset to 0 at 6:01
@@ -34,7 +37,7 @@ try:
 except Exception:
     state = {}
 old_state = dict(state)
-baseline = int(state.get("baseline", state.get("last_milestone", 0)))
+baseline = int(state.get("baseline", 0))   # highest count announced since the last reset
 last_post_time = float(state.get("last_post_time", 0))
 last_post_count = int(state.get("last_post_count", baseline))
 hour_reset = state.get("hour_reset", "")
@@ -98,31 +101,38 @@ if TEST_MODE:
     print(f"Posted: TEST MESSAGE: {players} players online")
     raise SystemExit(0)
 
-milestone = (players // STEP) * STEP
-print(f"{now:%I:%M %p} Eastern: {players} players online (milestone {milestone}, baseline {baseline})")
+minutes_since = (now_ts - last_post_time) / 60
+slow_mode_over = minutes_since >= SLOW_MODE_MINUTES
+print(f"{now:%I:%M %p} Eastern: {players} players online (highest announced {baseline}, "
+      f"last message {int(minutes_since)} min ago)")
 
 # ---- top of the hour: reset so rises can be announced again ----
 if hour_reset != hour_key:
-    baseline = min(baseline, milestone)
+    baseline = min(baseline, players)
     hour_reset = hour_key
 
-# ---- a rise of 5: post right away ----
-if milestone > baseline and milestone >= STEP:
-    post(players)
-    baseline = milestone
-    hourly_done = hour_key  # counts as this hour's update
+# ---- a new high (3+): post, but only once slow mode allows ----
+if players >= MIN_PLAYERS and players > baseline:
+    if slow_mode_over:
+        post(players)
+        baseline = players
+        hourly_done = hour_key  # counts as this hour's update
+    else:
+        print(f"New high of {players}, slow mode: waiting "
+              f"~{int(SLOW_MODE_MINUTES - minutes_since) + 1} more min")
 
 # ---- hourly update ----
 elif hourly_done != hour_key:
-    minutes_since = (now_ts - last_post_time) / 60
     if now.hour in RESTART_HOURS:
         print("Restart hour: skipping the hourly update")
         hourly_done = hour_key
-    elif players < STEP:
-        print("Fewer than 5 players: no hourly update")
+    elif players < MIN_PLAYERS:
+        print(f"Fewer than {MIN_PLAYERS} players: no hourly update")
         hourly_done = hour_key
     elif minutes_since < HOLD_MINUTES and last_post_count >= players:
         print(f"Holding hourly update: {last_post_count} was posted {int(minutes_since)} min ago")
+    elif not slow_mode_over:
+        print("Hourly update waiting for slow mode")
     else:
         post(players)
         hourly_done = hour_key
